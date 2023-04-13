@@ -3,16 +3,33 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import pickle
 
-
+#Import necessary dataset and model
 data = pd.read_csv('phl_schp_deped_clean.csv', encoding='ISO-8859-1')
-with st.form("New Input"):
+with open("rf_tk.pkl", "rb") as f:
+    model = pickle.load(f)
+
+#Define helper functions
+def manual_ohe(data, ref_df, column):
+    col = ref_df[column].unique()
+    for val in col:
+        if val not in data[column]:
+            data[f"{column}_{val}"] = 0
+        else:
+            data[f"{column}_{val}"] = 1
+    data.drop(column, inplace=True, axis=1)
+    return data
+st.set_page_config(layout="wide")
+st.title("School Type Recommender Engine")
+st.subheader("A project by Jamie, Ace, and Martel of DSF11 Eskwelabs")
+inp, res = st.columns(2)
+
+with inp.form("New Input"):
     input_data = {}
 
     input_data["region"] = [st.selectbox("Region", data["region"].unique())]
     input_data["province"] = [st.selectbox("Province", data["province"].unique())]
     input_data["legislative"] = [st.selectbox("Legislative", data["legislative"].unique())]
     input_data["division"] = [st.selectbox("Division", data["division"].unique())]
-
     input_data["total_enrollees"] = [st.number_input("Total Enrollees", min_value=1)]
     input_data["total_instructors"] = [st.number_input("Total Instructors", min_value=1)]
     input_data["poverty_incidence_among_families"] = [st.number_input("Poverty Incidence Among Families", min_value=0.0, format="%.2f")]
@@ -21,52 +38,29 @@ with st.form("New Input"):
 
     submit = st.form_submit_button("SUBMIT")
 
-
-
     if submit:
         df = pd.DataFrame.from_dict(data=input_data)
-        region = data["region"].unique()
-        for r in region:
-            if r not in df["region"]:
-                df[f"region_{r}"] = 0
-            else:
-                df[f"region_{r}"] = 1
+        
+        #Preprocessing
+        for col in ["region", "province", "legislative", "division"]:
+            df = manual_ohe(df, data, col)
 
-        province = data["province"].unique()
-        for p in province:
-            if p not in df["province"]:
-                df[f"province_{p}"] = 0
-            else:
-                df[f"province_{p}"] = 1
-
-        legislative = data["legislative"].unique()
-        for l in legislative:
-            if l not in df["legislative"]:
-                df[f"legislative_{l}"] = 0
-            else:
-                df[f"legislative_{l}"] = 1
-
-        division = data["division"].unique()
-        for d in division:
-            if d not in df["division"]:
-                df[f"division_{d}"] = 0
-            else:
-                df[f"division_{d}"] = 1
-
-        df.drop(["region", "province", "legislative", "division"], inplace=True, axis=1)
         scaler = StandardScaler()
         scaler = scaler.fit(data['population_as_of_may_2020'].values.reshape(-1, 1))
         df["population_as_of_may_2020"] = scaler.transform(df['population_as_of_may_2020'].values.reshape(-1, 1))
-
-        with open("rf_tk.pkl", "rb") as f:
-            model = pickle.load(f)
+        
+        #Generate predictions
         result = model.predict(df)
 
-        if result == 0:
-            result = "Annex or Extension School"
-        else:
-            result = "Lone School"
-        st.write(f"""
-        For {input_data["region"]} with {input_data["total_instructors"]} total instructors and {input_data["total_enrollees"]} total enrollees,
-        a {result} type school is recommended.
+
+res.info("See the recommendation here after submitting new data")
+if 'result' in locals():
+    #Generate recommendation spiel
+    if result == '0':
+        result = "Annex or Extension School"
+    else:
+        result = "Lone School"
+    res.write(f"""
+    For {input_data["region"]} with {input_data["total_instructors"]} total instructors and {input_data["total_enrollees"]} total enrollees,
+    a {result} type school is recommended.
         """)
